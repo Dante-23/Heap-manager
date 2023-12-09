@@ -15,8 +15,10 @@
 #include <sys/mman.h>
 #include <assert.h>
 #include "glthread.h"
+#include "styles.h"
 
 static size_t SYSTEM_PAGE_SIZE = 0;
+static size_t current_num_of_pages = 0;
 
 #define MM_MAX_STRUCT_NAME 32
 
@@ -84,7 +86,7 @@ static vm_page_for_families_t *first_vm_page_for_families = NULL;
 #define PREV_META_BLOCK(block_meta_data_ptr)    \
     (block_meta_data_ptr->prev_block)
 
-#define MM_BIND_BLOCKS_FOR_ALLOCATION (allocated_meta_block, free_meta_block) \
+#define MM_BIND_BLOCKS_FOR_ALLOCATION(allocated_meta_block, free_meta_block) \
     free_meta_block->prev = allocated_meta_block; \
     free_meta_block->next = allocated_meta_block->next; \
     allocated_meta_block->next = free_meta_block; \
@@ -108,6 +110,10 @@ static vm_page_for_families_t *first_vm_page_for_families = NULL;
 #define ITERATE_VM_PAGE_ALL_BLOCKS_END(vm_page_ptr, curr)   \
     }}
 
+#define NEXT_META_BLOCK_BY_SIZE(block_meta_data_ptr)    \
+    (block_meta_data_t *)((char *)(block_meta_data_ptr + 1) \
+        + block_meta_data_ptr->block_size)
+
 void init();
 void instantiate_new_page_family(char *struct_name, uint32_t struct_size);
 void print_registered_page_families();
@@ -115,6 +121,8 @@ vm_page_family_t* lookup_page_family_by_name(char *struct_name);
 bool is_vm_page_empty(vm_page_t *page);
 vm_page_t* allocate_vm_page(vm_page_family_t *vm_page_family);
 void vm_page_delete_and_free(vm_page_t *vm_page);
+void* xmalloc(char *struct_name, int units);
+void mm_print_memory_usage(char *struct_name);
 
 #define MM_REG_STRUCT(struct_name) \ 
     (instantiate_new_page_family(#struct_name, sizeof(struct_name)))

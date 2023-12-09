@@ -28,24 +28,35 @@ using namespace std;
     
 */
 
-struct emp_t {
-    char name[32];
-    uint32_t id;
-};
-
-struct node_t {
-    int data;
-    node_t *next;    
-};
-
-int main() {
-    cout << sizeof(block_meta_data_t) << endl;
+void test1() {
+    struct emp_t {
+        char name[32];
+        uint32_t id;
+    };
+    struct student_t {
+        char name[32];
+        uint32_t rollno;
+        uint32_t marks_phys;
+        uint32_t marks_chem;
+        uint32_t marks_maths;
+        student_t *next;
+    };
     init();
     MM_REG_STRUCT(emp_t);
-    MM_REG_STRUCT(node_t);
-    // print_registered_page_families();
-    // vm_page_family_t *family = lookup_page_family_by_name("emp_t");
-    // cout << family->struct_name << endl;
-    // cout << family->struct_size << endl;
+    MM_REG_STRUCT(student_t);
+    print_registered_page_families();
+    xmalloc("emp_t", 1);
+    xmalloc("emp_t", 1);
+    xmalloc("emp_t", 1);
+
+    xmalloc("student_t", 1);
+    xmalloc("student_t", 1);
+
+    mm_print_memory_usage("emp_t");
+    mm_print_memory_usage("student_t");
+}
+
+int main() {
+    test1();
     return 0;
 }

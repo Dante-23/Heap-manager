@@ -18,6 +18,7 @@ static void* get_new_virtual_page(int units) {
         return NULL;
     }
     memset(page, 0, units * SYSTEM_PAGE_SIZE);
+    current_num_of_pages++;
     return (void*) page;
 }
 
@@ -171,4 +172,129 @@ static inline block_meta_data_t* get_biggest_free_block_page_family(vm_page_fami
     glthread_t *biggest_free_block_glue = vm_page_family->free_block_priority_list_head.right;
     if (biggest_free_block_glue) return glthread_to_block_meta_data(biggest_free_block_glue);
     return NULL;
+}
+
+static bool split_free_data_block_for_allocation(vm_page_family_t *pg_family, 
+                block_meta_data_t *block_meta_data, uint32_t size) {
+    assert(block_meta_data->is_free == true);
+    block_meta_data_t *next_block_meta_data = NULL;
+    if (block_meta_data->block_size < size) {
+        return false;
+    }
+    uint32_t remaining_size = block_meta_data->block_size - size;
+    block_meta_data->is_free = false;
+    block_meta_data->block_size = size;
+    remove_glthread(&block_meta_data->priority_thread_glue);
+
+    // Case 1 :- No split. size == available block size. 
+    if (!remaining_size) return true;
+    /* Case 2 :- Partial split :- soft internal fragmentation. 
+    *  Available block is split. Free memory after allocation can
+    *  hold another meta block. 
+    */
+    else if (sizeof(block_meta_data_t) < remaining_size && 
+        remaining_size < sizeof(block_meta_data_t) + pg_family->struct_size) {
+        next_block_meta_data = NEXT_META_BLOCK_BY_SIZE(block_meta_data);
+        next_block_meta_data->is_free = true;
+        next_block_meta_data->block_size = remaining_size - sizeof(block_meta_data_t);
+        next_block_meta_data->offset = block_meta_data->offset + 
+            sizeof(block_meta_data_t) + block_meta_data->block_size;
+        init_glthread(&next_block_meta_data->priority_thread_glue);
+        add_free_block_meta_data_to_free_block_list(pg_family, next_block_meta_data);
+        MM_BIND_BLOCKS_FOR_ALLOCATION(block_meta_data, next_block_meta_data);
+    }
+    /* Case 2 :-
+    *   Partial split :- hard internal fragmentation. 
+    *   Remaining size cannot even hold a meta block. 
+    */
+    else if (remaining_size < sizeof(block_meta_data_t)) {
+
+    }
+    /* Case 3 :- 
+    *  Full split :- new meta block is created. 
+    */
+    else {
+        next_block_meta_data = NEXT_META_BLOCK_BY_SIZE(block_meta_data);
+        next_block_meta_data->is_free = true;
+        next_block_meta_data->block_size = remaining_size - sizeof(block_meta_data_t);
+        next_block_meta_data->offset = block_meta_data->offset + 
+            sizeof(block_meta_data_t) + block_meta_data->block_size;
+        init_glthread(&next_block_meta_data->priority_thread_glue);
+        add_free_block_meta_data_to_free_block_list(pg_family, next_block_meta_data);
+        MM_BIND_BLOCKS_FOR_ALLOCATION(block_meta_data, next_block_meta_data);
+    }
+    return true;
+}
+
+static block_meta_data_t* allocate_free_data_block(vm_page_family_t *pg_family, 
+            uint32_t size) {
+    bool status = false;
+    vm_page_t *vm_page = NULL;
+    block_meta_data_t *block_meta_data = NULL;
+    block_meta_data_t *biggest_block_meta_data = get_biggest_free_block_page_family(pg_family);
+    if (biggest_block_meta_data == NULL) {
+        if (DEBUG) cout << "biggest_block_meta_data is NULL" << endl;
+    }
+    if (!biggest_block_meta_data || biggest_block_meta_data->block_size < size) {
+        vm_page = allocate_vm_page(pg_family);
+        status = split_free_data_block_for_allocation(pg_family, &vm_page->block_meta_data, size);
+        if (status) return &vm_page->block_meta_data;
+        if (DEBUG) cout << "Returning NULL" << endl;
+        return NULL;
+    }
+    if (biggest_block_meta_data) {
+        status = split_free_data_block_for_allocation(pg_family, biggest_block_meta_data, size);
+    }
+    if (status) return biggest_block_meta_data;
+    return NULL;
+}
+
+void* xmalloc(char *struct_name, int units) {
+    vm_page_family_t *pg_family = lookup_page_family_by_name(struct_name);
+    if (pg_family == NULL) {
+        cout << "Error: structure " << struct_name << " is not registered" << endl;
+        return NULL;
+    }
+    if (units * pg_family->struct_size > max_page_allocatable_memory(1)) {
+        cout << "Requested memory greater than page size" << endl;
+        return NULL;
+    }
+    block_meta_data_t *free_block_meta_data = NULL;
+    free_block_meta_data = allocate_free_data_block(pg_family, units * pg_family->struct_size);
+    if (free_block_meta_data) {
+        memset((char*)(free_block_meta_data + 1), 0, free_block_meta_data->block_size);
+        return (void*) (free_block_meta_data + 1);
+    }
+    cout << "Some error occurred" << endl;
+    return NULL;
+}
+
+static void print_block_meta_data(block_meta_data_t *node, uint32_t block_num) {
+    char *allocation_message = "";
+    if (node->is_free) allocation_message = "F R E E D";
+    else allocation_message = "Allocated";
+    printf("0x%x Block %d   %s block_size = %d   offset = %d prev = 0x%x next = 0x%x\n",
+    node, block_num, allocation_message, node->block_size, node->offset, node->prev, node->next);
+}
+
+void mm_print_memory_usage(char *struct_name) {
+    printf("#########################################################\n");
+    printf("Page size: %d bytes\n", SYSTEM_PAGE_SIZE);
+    printf("Printing memory usage of: %s\n", struct_name);
+    vm_page_family_t *pg_family = lookup_page_family_by_name(struct_name);
+    vm_page_t *page = pg_family->first_page;
+    uint32_t total_pages = 0;
+    while (page) {
+        block_meta_data_t *block_meta_data = &page->block_meta_data;
+        uint32_t block_num = 0;
+        while(block_meta_data) {
+            print_block_meta_data(block_meta_data, block_num);
+            block_meta_data = block_meta_data->next;
+            block_num++;
+        }
+        page = page->next;
+        total_pages++;
+    }
+    printf("Number of pages in use: %d\n", total_pages);
+    printf("#########################################################\n");
 }
