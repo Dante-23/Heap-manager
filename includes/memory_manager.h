@@ -16,6 +16,7 @@
 #include <assert.h>
 #include "glthread.h"
 #include "styles.h"
+#include <iomanip>
 
 static size_t SYSTEM_PAGE_SIZE = 0;
 static size_t current_num_of_pages = 0;
@@ -123,6 +124,7 @@ vm_page_t* allocate_vm_page(vm_page_family_t *vm_page_family);
 void vm_page_delete_and_free(vm_page_t *vm_page);
 void* xmalloc(char *struct_name, int units);
 void mm_print_memory_usage(char *struct_name);
+void mm_print_usage_summary();
 
 #define MM_REG_STRUCT(struct_name) \ 
     (instantiate_new_page_family(#struct_name, sizeof(struct_name)))

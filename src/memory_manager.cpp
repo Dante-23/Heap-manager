@@ -131,6 +131,7 @@ vm_page_t* allocate_vm_page(vm_page_family_t *vm_page_family) {
     }
     new_page->next = vm_page_family->first_page;
     vm_page_family->first_page->prev = new_page;
+    vm_page_family->first_page = new_page;
     return new_page;
 }
 
@@ -297,4 +298,46 @@ void mm_print_memory_usage(char *struct_name) {
     }
     printf("Number of pages in use: %d\n", total_pages);
     printf("#########################################################\n");
+}
+
+void mm_print_family_summary(vm_page_family_t *pg_family) {
+    if (pg_family == NULL) return;
+    vm_page_t *page = pg_family->first_page;
+    uint32_t free_blocks = 0, allocated_blocks = 0, total_pages = 0;
+    while(page) {
+        block_meta_data_t *block_meta_data = &page->block_meta_data;
+        while(block_meta_data) {
+            if (block_meta_data->is_free) free_blocks++;
+            else allocated_blocks++;
+            block_meta_data = block_meta_data->next;
+        }
+        total_pages++;
+        page = page->next;
+    }
+    cout << "+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++" << endl;
+    cout << "Page family       : " << pg_family->struct_name << endl;
+    cout << "Total blocks      : " << allocated_blocks + free_blocks << endl;
+    cout << "Allocated blocks  : " << allocated_blocks << endl;
+    cout << "Free blocks       : " << free_blocks << endl;
+    cout << "Usage (in bytes)  : " << (allocated_blocks) * pg_family->struct_size + (allocated_blocks) * sizeof(block_meta_data_t) << endl;
+    cout << "Total pages used  : " << total_pages << endl;
+    cout << "+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++" << endl;
+}
+
+void mm_print_usage_summary() {
+    vm_page_for_families_t *curr = first_vm_page_for_families;
+    uint32_t families_in_one_page = (SYSTEM_PAGE_SIZE - sizeof(void*)) / sizeof(vm_page_family_t);
+    while(curr != NULL) {
+        bool done = false;
+        for (int i = 0; i < families_in_one_page; i++) {
+            vm_page_family_t *pg_family = &curr->vm_page_family[i];
+            if (!pg_family->struct_size) {
+                done = true;
+                break;
+            }
+            mm_print_family_summary(pg_family);
+        }
+        if (done) break;
+        curr = curr->next;
+    }
 }

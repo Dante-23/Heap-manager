@@ -1,4 +1,5 @@
 #include <iostream>
+#include <iomanip>
 #include "includes/memory_manager.h"
 using namespace std;
 
@@ -43,20 +44,32 @@ void test1() {
     };
     init();
     MM_REG_STRUCT(emp_t);
-    MM_REG_STRUCT(student_t);
+    // MM_REG_STRUCT(student_t);
     print_registered_page_families();
-    xmalloc("emp_t", 1);
-    xmalloc("emp_t", 1);
-    xmalloc("emp_t", 1);
+    // xmalloc("emp_t", 1);
+    // xmalloc("emp_t", 1);
+    // xmalloc("emp_t", 1);
 
-    xmalloc("student_t", 1);
-    xmalloc("student_t", 1);
+    // xmalloc("student_t", 1);
+    // xmalloc("student_t", 1);
+
+    int n = 10000;
+    for (int i = 0; i < n; i++) {
+        // cout << "i: " << i << endl;
+        xmalloc("emp_t", 1);
+        // xmalloc("student_t", 1);
+    }
 
     mm_print_memory_usage("emp_t");
-    mm_print_memory_usage("student_t");
+    // mm_print_memory_usage("student_t");
+
+    mm_print_usage_summary();
+    cout << "Size of meta block: " << sizeof(block_meta_data_t) << endl;
+    cout << n * (sizeof(emp_t) + sizeof(block_meta_data_t)) << endl;
 }
 
 int main() {
     test1();
+    // cout << setw(10) << "Hello" << endl;
     return 0;
 }
